@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: court-alerts-db
+    environment:
+      POSTGRES_USER: court_alerts
+      POSTGRES_PASSWORD: local_dev_only
+      POSTGRES_DB: court_alerts
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U court_alerts -d court_alerts"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
