@@ -4,7 +4,21 @@ def find_opened_slots(before: list[dict], after: list[dict]) -> list[dict]:
     This is what a cancellation looks like: someone released a court and it
     became bookable between two polls.
     """
-    was_open = {(s["court"], s["start"]) for s in before if s["available"]}
-    return [
-        s for s in after if s["available"] and (s["court"], s["start"]) not in was_open
-    ]
+    # Step 1: collect (court, start) pairs that were already open before.
+    was_open = set()
+    for slot in before:
+        if slot["available"]:
+            key = (slot["court"], slot["start"])
+            was_open.add(key)
+
+    # Step 2: keep slots that are open now but were not open before.
+    opened = []
+    for slot in after:
+        if not slot["available"]:
+            continue
+
+        key = (slot["court"], slot["start"])
+        if key not in was_open:
+            opened.append(slot)
+
+    return opened
