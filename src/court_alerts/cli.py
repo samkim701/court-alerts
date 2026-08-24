@@ -7,6 +7,7 @@ from court_alerts.config import CLUB_NAME
 from court_alerts.core.subscription import Subscription
 from court_alerts.db.session import SessionLocal
 from court_alerts.db.migrate import upgrade_to_head
+from court_alerts.db.repository import load_untriaged_runs, save_verdict
 from court_alerts.notify.factory import build_notifier
 from court_alerts.poller import run_poll
 from court_alerts.providers.mock import MockProvider, make_day, open_slot
@@ -82,25 +83,6 @@ def run_demo() -> None:
             print(f"  error: {result.error}")
 
 
-def run_triage() -> None:
-    """Classify the recent poll history for the demo club."""
-    agent = build_triage_agent()
-    session = SessionLocal()
-    try:
-        evidence = build_evidence(session, DEMO_CLUB_ID)
-    finally:
-        session.close()
-
-    print(f"Agent: {agent.name}  Runs examined: {evidence['runs_examined']}")
-
-    verdict = safe_triage(agent, evidence)
-
-    print(f"  category:     {verdict.category.value}")
-    print(f"  needs_human:  {verdict.needs_human}")
-    print(f"  confidence:   {verdict.confidence}")
-    print(f"  summary:      {verdict.summary}")
-
-
 def run_eval(agent_name: str) -> None:
     """Score one triage agent against the golden set."""
     if agent_name == "heuristic":
@@ -132,6 +114,36 @@ def main() -> None:
         run_triage()
     elif args.command == "eval":
         run_eval(args.agent)
+
+
+def run_triage() -> None:
+    """Classify failed runs that have not been triaged yet."""
+    agent = build_triage_agent()
+    session = SessionLocal()
+
+    try:
+        pending = load_untriaged_runs(session, DEMO_CLUB_ID)
+        if not pending:
+            print(f"Agent: {agent.name}  No untriaged failures.")
+            return
+
+        evidence = build_evidence(session, DEMO_CLUB_ID)
+        print(f"Agent: {agent.name}  Pending failures: {len(pending)}")
+
+        for run in pending:
+            verdict = safe_triage(agent, evidence)
+            save_verdict(session, run, verdict)
+            print(
+                f"  run {run.id} ({run.status}): "
+                f"{verdict.category.value} "
+                f"needs_human={verdict.needs_human} "
+                f"confidence={verdict.confidence}"
+            )
+            print(f"    {verdict.summary}")
+
+        session.commit()
+    finally:
+        session.close()
 
 
 if __name__ == "__main__":

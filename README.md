@@ -216,6 +216,17 @@ caught `httpx.RequestError`, so a configuration error killed the
 poller instead of being recorded as a delivery failure. Both are fixed;
 the second widened the exception handler.
 
+A stopped database that looked like a missing socket. The poller
+failed with OperationalError: No such file or directory on the Cloud
+SQL socket path — which reads as a configuration problem, and cost me
+twenty minutes of checking annotations. The actual cause was three log
+lines below, from the Cloud SQL proxy: Error 409 ... invalidState.
+The instance had been stopped to save cost, so the proxy never created
+the socket the application was looking for. The symptom and the cause
+were in different log streams. This is precisely the discrimination the
+triage agent exists to make: no structured field distinguishes the two,
+only the free text does.
+
 ## Evaluation
 
 `evals/cases.py` holds 12 hand-labelled evidence bundles covering three

@@ -15,3 +15,5 @@ postgres-data/
 .DS_Store
 eval-*.txt
 eval-*.txt
+web/node_modules/
+web/dist/

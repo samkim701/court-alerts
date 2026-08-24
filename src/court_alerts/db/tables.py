@@ -6,6 +6,7 @@ from enum import Enum
 from sqlalchemy import (
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -112,6 +113,14 @@ class PollRun(Base):
 
     snapshot_id: Mapped[int | None] = mapped_column(
         ForeignKey("snapshots.id", ondelete="SET NULL"), nullable=True
+    )
+    triage_category: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    triage_needs_human: Mapped[bool | None] = mapped_column(nullable=True)
+    triage_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    triage_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    triage_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    triaged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     __table_args__ = (
