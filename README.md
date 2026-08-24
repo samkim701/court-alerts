@@ -1,5 +1,7 @@
 # court-alerts
 
+[한국어](README.ko.md)
+
 A read-only monitor that watches pickleball court availability at a
 Life Time club and sends a Discord alert when a booked slot opens up.
 Failed polls are classified by an LLM triage agent whose output is
@@ -69,10 +71,11 @@ To use real integrations, copy `.env.example` to `.env` and fill in
 Other commands:
 
 ```bash
-uv run court-alerts triage             # classify the recent poll history
+uv run alembic upgrade head            # demo does this automatically
+uv run court-alerts triage             # classify untriaged failures
 uv run court-alerts eval               # score the LLM against the golden set
 uv run court-alerts eval --agent heuristic
-uv run pytest -q                       # 51 tests
+uv run pytest -q                       # 53 tests
 ```
 
 ---
@@ -95,11 +98,13 @@ triage/base.py        TriageAgent contract
 providers/mock.py  notify/discord.py  triage/gemini.py  db/
        ^
 poller.py             the only place these meet
+       ^
+api/                  read-only HTTP layer
 ```
 
 Consequences:
 
-- The 43 unit tests run in under 0.5s with no database and no network.
+- The 44 unit tests run in under 0.5s with no database and no network.
 - Swapping the mock provider for a real one touches one file.
 - Every boundary that can fail has a matching in-process implementation
   (`MockProvider`, `ConsoleNotifier`, `HeuristicTriageAgent`), so the
@@ -116,6 +121,10 @@ the triage agent reads.
 All timestamps are `timestamptz`, converted back to club-local time on
 read. Storing naive datetimes would have made the same wall-clock hour
 ambiguous twice a year during the DST fall-back.
+
+Schema changes go through Alembic. A test asserts that the models and
+the migrations agree, so schema drift fails the suite rather than the
+deployment.
 
 ---
 
@@ -172,12 +181,11 @@ wraps everything as a last line of defence.
 HTTP 429 and 5xx are retried with exponential backoff. 401 and 404 are
 not — the same request will produce the same answer.
 
+Triage runs as a separate command rather than inside the poll loop, and
+only over runs that actually failed. Sending healthy runs to a model
+costs money and produces nothing but `no_issue`.
+
 ### This was tested by accident
-
-Recovery was equally informative: reverting the model name restored
-full function immediately, confirming that the 404 had nothing to do
-with the request shape.
-
 
 During development the API produced three different failures in one
 afternoon: a misconfigured model name returning 404 on every request,
@@ -187,7 +195,40 @@ and **not one incorrect diagnosis was produced**. The 404 case also
 confirmed safeguard 4 from the other direction — retrying a name that
 does not exist would only have wasted the job's runtime.
 
+Recovery was equally informative: reverting the model name restored
+full function immediately, confirming that the 404 had nothing to do
+with the request shape.
+
 The observability layer degraded without damaging the thing it observes.
+
+---
+
+## Web UI
+
+A read-only FastAPI layer (`/api/runs`, `/api/openings`,
+`/api/subscriptions`) and a single-page React dashboard. No endpoint
+writes — there is no `commit()` anywhere in the API, and CORS is scoped
+to one origin and to `GET`.
+
+![Operations dashboard](docs/dashboard.png)
+
+The poll history is the point of the UI. Discord already delivers the
+alerts, so a second place to read them adds little — but nothing in
+Discord shows whether the monitor itself is healthy. The table does:
+every attempt, its slot count drawn as a bar so a drop to zero is
+visible without reading a number, how many openings were detected, how
+many alerts actually went out, and the triage verdict on failed runs.
+Clicking a failed row expands the raw error and the model's reading of
+it.
+
+The screenshot is a real failure: polling succeeded and found two
+openings, delivery failed, and the classifier separated those two facts
+correctly.
+
+```bash
+uv run uvicorn court_alerts.api.app:app --port 8000   # API on :8000
+cd web && npm install && npm run dev                  # UI on :5173
+```
 
 ---
 
@@ -206,26 +247,37 @@ Running on Google Cloud as a scheduled Cloud Run Job:
   to those three secrets individually.
 - **Cloud Scheduler** — triggers the job every 15 minutes.
 
-Two failures on the way there are worth recording. The first
-deployment failed with no logs at all, because `logging.googleapis.com`
-had not been enabled — debugging an observability gap without
-observability. The second failed because `.env` used CRLF line endings,
-so the webhook secret carried a trailing carriage return and `httpx`
-raised `InvalidURL` before any request was sent. `DiscordNotifier` only
-caught `httpx.RequestError`, so a configuration error killed the
-poller instead of being recorded as a delivery failure. Both are fixed;
-the second widened the exception handler.
+Three failures on the way there are worth recording, because each is a
+category of mistake rather than a typo.
 
-A stopped database that looked like a missing socket. The poller
-failed with OperationalError: No such file or directory on the Cloud
-SQL socket path — which reads as a configuration problem, and cost me
-twenty minutes of checking annotations. The actual cause was three log
-lines below, from the Cloud SQL proxy: Error 409 ... invalidState.
-The instance had been stopped to save cost, so the proxy never created
-the socket the application was looking for. The symptom and the cause
-were in different log streams. This is precisely the discrimination the
-triage agent exists to make: no structured field distinguishes the two,
-only the free text does.
+**No logs.** The first deployment failed with an empty log stream —
+`logging.googleapis.com` had not been enabled. Thirty minutes went into
+guessing at a container that had no way to say what was wrong.
+Observability added after the fact is observability you don't have when
+you need it.
+
+**A carriage return.** `.env` used CRLF line endings, so the webhook
+secret was stored with a trailing `\r`. `httpx` rejected the URL before
+sending anything, raising `InvalidURL` — which is not a subclass of
+`httpx.RequestError`, so `DiscordNotifier` didn't catch it and a
+configuration error killed the poller instead of being recorded as a
+delivery failure. Fixed by widening the handler and stripping `\r` when
+loading secrets. A regression test now pins it.
+
+**A stopped database that looked like a missing socket.** The poller
+failed with `OperationalError: No such file or directory` on the Cloud
+SQL socket path — which reads as a configuration problem, and cost
+twenty minutes of checking annotations and IAM bindings. The actual
+cause was three log lines below, from the Cloud SQL proxy:
+`Error 409 ... invalidState`. The instance had been stopped to save
+cost, so the proxy never created the socket the application was looking
+for. The symptom and the cause were in different log streams, and no
+structured field distinguishes "socket misconfigured" from "database
+stopped" — only the free text does. That is exactly the discrimination
+the triage agent exists to make, and why the evidence bundle carries
+error messages rather than just error types.
+
+---
 
 ## Evaluation
 
@@ -241,9 +293,9 @@ kinds of judgement:
 - **Honest uncertainty** — `no_history` and `uninformative_error` have
   `unknown` as the correct answer.
 
-| Agent | Category accuracy |
-|---|---|
-| `HeuristicTriageAgent` (rules) | **8 / 12** |
+| Agent | Category | needs_human |
+|---|---|---|
+| `HeuristicTriageAgent` (rules) | 8 / 12 | 8 / 12 |
 | `GeminiTriageAgent` | **10 / 12** | **12 / 12** |
 
 The rule-based baseline fails in a way that is structural, not tunable.
@@ -269,13 +321,13 @@ that conclusion visible instead of a guess.
 Both misses landed on `unknown`, not on a confident wrong answer, and
 `needs_human` was correct in all 12 cases. The failure mode this design
 was built to prevent — a plausible-sounding incorrect diagnosis — did
-not occur
+not occur.
 
 ---
 
 ## Testing
 
-51 tests. Unit tests cover pure logic with no I/O; integration tests
+53 tests. Unit tests cover pure logic with no I/O; integration tests
 run against Postgres on a **separate database**, each inside a
 transaction that is rolled back.
 
@@ -284,8 +336,7 @@ originally shared the application database, so running the demo made a
 cold-start test fail. Test outcomes depended on what had been run
 before — which is a test suite that lies.
 
-
-Three tests are worth calling out:
+Four tests are worth calling out:
 
 - `test_snapshot_survives_a_delivery_failure` pins the at-least-once
   trade-off above.
@@ -296,6 +347,8 @@ Three tests are worth calling out:
   assembly code had nothing testing it.
 - `test_models_and_migrations_agree` fails if a model changes without a
   matching migration, so schema drift cannot reach deployment.
+
+---
 
 ## Secrets
 
@@ -308,10 +361,21 @@ handler to include a truncated response body in its diagnostics.
 Discord's own exceptions embed the full webhook URL, so
 `DiscordNotifier` carries forward only the exception class name.
 
+In production the three secrets live in Secret Manager and are injected
+as environment variables at execution time, and the job's service
+account can read those three and nothing else.
+
+---
+
 ## Not built yet
 
 - **Real Life Time adapter** — gated on a written answer about terms of
-  use. The interface is ready.
-- **Web UI** — subscriptions are hard-coded in `cli.py`. A Vite + React
-  frontend for creating subscriptions, viewing detected openings, and
-  reviewing triage verdicts is the next step.
+  use. The interface is ready; adding it is one file.
+- **Subscription writes** — subscriptions are still hard-coded in
+  `cli.py` and served read-only. Moving them into the database and
+  adding a create form is the next step.
+- **Infrastructure as code** — deployment is a sequence of gcloud
+  commands. A partial `jobs update` silently dropped the Cloud SQL
+  connection once, which is exactly the failure a declarative config
+  (Terraform, or `gcloud run jobs replace job.yaml`) prevents.
+- **Frontend tests** — the Python side has 53; the React side has none.
