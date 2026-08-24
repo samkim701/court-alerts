@@ -174,6 +174,11 @@ not — the same request will produce the same answer.
 
 ### This was tested by accident
 
+Recovery was equally informative: reverting the model name restored
+full function immediately, confirming that the 404 had nothing to do
+with the request shape.
+
+
 During development the API produced three different failures in one
 afternoon: a misconfigured model name returning 404 on every request,
 a 503 under load, and read timeouts. The poller kept working through
@@ -203,18 +208,32 @@ kinds of judgement:
 | Agent | Category accuracy |
 |---|---|
 | `HeuristicTriageAgent` (rules) | **8 / 12** |
-| `GeminiTriageAgent` | _TBD_ |
+| `GeminiTriageAgent` | **10 / 12** | **12 / 12** |
 
-The rule-based baseline fails in a way that is structural, not
-tunable. It collapses `expired_session`, `forbidden`, and
-`shape_changed` into `transient_upstream` because it never reads the
-error text, and it asserts `transient_upstream` for
-`uninformative_error` because rules have no concept of "I don't know."
-Regex could patch the first three until the upstream rewrites its
-error strings.
+The rule-based baseline fails in a way that is structural, not tunable.
+It collapses `expired_session`, `forbidden`, and `shape_changed` into
+`transient_upstream` because it never reads the error text, and it
+asserts `transient_upstream` for `uninformative_error` because rules
+have no concept of "I don't know." The model got all four right.
 
-The baseline exists so the LLM has something to beat. Reporting an
-LLM's accuracy without one says nothing.
+The interesting part is where the model lost. Both of its misses —
+`persistent_timeouts` and `empty_schedule` — returned `unknown` rather
+than a wrong category. `empty_schedule` is a purely numeric judgement
+(slot_count fell to zero after a run of 64s) and the heuristic gets it
+trivially. `persistent_timeouts` is arguably a flaw in my label: after
+five identical failures, calling them "transient" is questionable, and
+the model may have declined for that reason.
+
+So the two approaches fail in opposite directions. Rules are reliable
+on numeric thresholds and blind to prose; the model reads prose well
+and hedges on arithmetic. A production version would run the rules
+first and hand only the residue to the model — the eval is what makes
+that conclusion visible instead of a guess.
+
+Both misses landed on `unknown`, not on a confident wrong answer, and
+`needs_human` was correct in all 12 cases. The failure mode this design
+was built to prevent — a plausible-sounding incorrect diagnosis — did
+not occur
 
 ---
 
