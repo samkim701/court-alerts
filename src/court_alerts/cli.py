@@ -9,6 +9,9 @@ from court_alerts.db.session import SessionLocal, create_all
 from court_alerts.notify.factory import build_notifier
 from court_alerts.poller import run_poll
 from court_alerts.providers.mock import MockProvider, make_day, open_slot
+from court_alerts.triage.base import safe_triage
+from court_alerts.triage.evidence import build_evidence
+from court_alerts.triage.factory import build_triage_agent
 
 DEMO_CLUB_ID = "centreville"
 DEMO_COURTS = ["Court 1", "Court 2", "Court 3", "Court 4"]
@@ -74,18 +77,38 @@ def run_demo() -> None:
         if result.error is not None:
             print(f"  error: {result.error}")
 
+def run_triage() -> None:
+    """Classify the recent poll history for the demo club."""
+    agent = build_triage_agent()
+    session = SessionLocal()
+    try:
+        evidence = build_evidence(session, DEMO_CLUB_ID)
+    finally:
+        session.close()
+
+    print(f"Agent: {agent.name}  Runs examined: {evidence['runs_examined']}")
+
+    verdict = safe_triage(agent, evidence)
+
+    print(f"  category:     {verdict.category.value}")
+    print(f"  needs_human:  {verdict.needs_human}")
+    print(f"  confidence:   {verdict.confidence}")
+    print(f"  summary:      {verdict.summary}")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(prog="court-alerts")
     parser.add_argument(
         "command",
-        choices=["demo"],
-        help="demo: run two poll cycles against the mock provider",
+        choices=["demo", "triage"],
+        help="demo: run two poll cycles; triage: classify recent runs",
     )
     args = parser.parse_args()
 
     if args.command == "demo":
         run_demo()
+    elif args.command == "triage":
+        run_triage()
 
 
 if __name__ == "__main__":
