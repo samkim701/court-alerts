@@ -6,8 +6,10 @@ from court_alerts.config import GEMINI_MODEL
 from court_alerts.triage.base import TriageVerdict, unknown_verdict
 from court_alerts.triage.prompt import build_prompt, parse_verdict
 
-ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-DEFAULT_TIMEOUT_SECONDS = 20.0
+ENDPOINT = (
+    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+)
+DEFAULT_TIMEOUT_SECONDS = 45.0
 
 
 class GeminiTriageAgent:

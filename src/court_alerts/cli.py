@@ -12,6 +12,8 @@ from court_alerts.providers.mock import MockProvider, make_day, open_slot
 from court_alerts.triage.base import safe_triage
 from court_alerts.triage.evidence import build_evidence
 from court_alerts.triage.factory import build_triage_agent
+from court_alerts.evals.runner import format_report, score_agent
+from court_alerts.triage.heuristic import HeuristicTriageAgent
 
 DEMO_CLUB_ID = "centreville"
 DEMO_COURTS = ["Court 1", "Court 2", "Court 3", "Court 4"]
@@ -77,6 +79,7 @@ def run_demo() -> None:
         if result.error is not None:
             print(f"  error: {result.error}")
 
+
 def run_triage() -> None:
     """Classify the recent poll history for the demo club."""
     agent = build_triage_agent()
@@ -96,12 +99,28 @@ def run_triage() -> None:
     print(f"  summary:      {verdict.summary}")
 
 
+def run_eval(agent_name: str) -> None:
+    """Score one triage agent against the golden set."""
+    if agent_name == "heuristic":
+        agent = HeuristicTriageAgent()
+    else:
+        agent = build_triage_agent()
+
+    print(format_report(score_agent(agent)))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="court-alerts")
     parser.add_argument(
         "command",
-        choices=["demo", "triage"],
-        help="demo: run two poll cycles; triage: classify recent runs",
+        choices=["demo", "triage", "eval"],
+        help="demo: poll cycles; triage: classify recent runs; eval: score the golden set",
+    )
+    parser.add_argument(
+        "--agent",
+        choices=["auto", "heuristic"],
+        default="auto",
+        help="which triage agent to score (eval only)",
     )
     args = parser.parse_args()
 
@@ -109,6 +128,8 @@ def main() -> None:
         run_demo()
     elif args.command == "triage":
         run_triage()
+    elif args.command == "eval":
+        run_eval(args.agent)
 
 
 if __name__ == "__main__":
