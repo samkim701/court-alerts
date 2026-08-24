@@ -29,7 +29,7 @@ class DiscordNotifier:
                 json={"content": text},
                 timeout=self._timeout,
             )
-        except httpx.RequestError as error:
+        except (httpx.RequestError, httpx.InvalidURL) as error:
             # The exception's own message can contain the full URL,
             # so only the class name is carried forward.
             raise NotifierError(
