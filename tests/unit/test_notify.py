@@ -35,7 +35,9 @@ def test_console_notifier_records_what_it_sent():
 
 
 def test_alert_lists_every_slot_in_one_message():
-    text = format_alert("Monday evening", [slot("Court 2", 20), slot("Court 1", 19)], CLUB)
+    text = format_alert(
+        "Monday evening", [slot("Court 2", 20), slot("Court 1", 19)], CLUB
+    )
 
     assert "2 opening(s)" in text
     assert "Court 1" in text
@@ -59,9 +61,18 @@ def test_discord_notifier_needs_a_url():
     with pytest.raises(ValueError):
         DiscordNotifier("")
 
+
 def test_factory_falls_back_to_console_without_a_webhook(monkeypatch):
     monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
 
     from court_alerts.notify.factory import build_notifier
 
     assert build_notifier().name == "console"
+
+
+def test_malformed_webhook_becomes_a_notifier_error():
+    """A bad URL must be recorded as a delivery failure, not crash the poller."""
+    notifier = DiscordNotifier("https://discord.com/api/webhooks/1/token\r")
+
+    with pytest.raises(NotifierError):
+        notifier.send("hello")

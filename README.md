@@ -191,6 +191,31 @@ The observability layer degraded without damaging the thing it observes.
 
 ---
 
+## Deployment
+
+Running on Google Cloud as a scheduled Cloud Run Job:
+
+- **Cloud Run Job** — every execution is a fresh process, which is why
+  all state lives in Postgres rather than memory.
+- **Cloud SQL (Postgres 16)** — reached over a Unix socket, so the
+  connection string is assembled at runtime from a secret rather than
+  stored anywhere.
+- **Secret Manager** — the DB password, Discord webhook, and Gemini key
+  are injected at execution time. The job's service account holds only
+  `cloudsql.client`, `logging.logWriter`, and `secretAccessor` scoped
+  to those three secrets individually.
+- **Cloud Scheduler** — triggers the job every 15 minutes.
+
+Two failures on the way there are worth recording. The first
+deployment failed with no logs at all, because `logging.googleapis.com`
+had not been enabled — debugging an observability gap without
+observability. The second failed because `.env` used CRLF line endings,
+so the webhook secret carried a trailing carriage return and `httpx`
+raised `InvalidURL` before any request was sent. `DiscordNotifier` only
+caught `httpx.RequestError`, so a configuration error killed the
+poller instead of being recorded as a delivery failure. Both are fixed;
+the second widened the exception handler.
+
 ## Evaluation
 
 `evals/cases.py` holds 12 hand-labelled evidence bundles covering three
@@ -279,5 +304,3 @@ Discord's own exceptions embed the full webhook URL, so
 - **Web UI** — subscriptions are hard-coded in `cli.py`. A Vite + React
   frontend for creating subscriptions, viewing detected openings, and
   reviewing triage verdicts is the next step.
-- **Deployment** — designed for Cloud Run Jobs (every run is a fresh
-  process, which is why state lives in Postgres), but not yet deployed.
