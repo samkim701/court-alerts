@@ -248,6 +248,9 @@ originally shared the application database, so running the demo made a
 cold-start test fail. Test outcomes depended on what had been run
 before — which is a test suite that lies.
 
+- `test_models_and_migrations_agree` fails if a model changes without a
+  matching migration, so schema drift cannot reach deployment.
+  
 Three tests are worth calling out:
 
 - `test_snapshot_survives_a_delivery_failure` pins the at-least-once
@@ -273,8 +276,6 @@ Discord's own exceptions embed the full webhook URL, so
 
 - **Real Life Time adapter** — gated on a written answer about terms of
   use. The interface is ready.
-- **Alembic migrations** — `create_all()` covers a schema that is still
-  moving. This was consciously deprioritised below the eval set.
 - **Web UI** — subscriptions are hard-coded in `cli.py`. A Vite + React
   frontend for creating subscriptions, viewing detected openings, and
   reviewing triage verdicts is the next step.

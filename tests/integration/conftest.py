@@ -3,12 +3,12 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from court_alerts.config import get_database_url
-from court_alerts.db.tables import Base
+from court_alerts.db.migrate import upgrade_to_head
 
 TEST_DB_NAME = "court_alerts_test"
 
 
-def build_test_engine():
+def build_test_database_url() -> str:
     """A second database on the same server, so app data and test data
     can never contaminate each other."""
     admin_url = get_database_url()
@@ -25,15 +25,18 @@ def build_test_engine():
     admin_engine.dispose()
 
     base_url = admin_url.rsplit("/", 1)[0]
-    return create_engine(f"{base_url}/{TEST_DB_NAME}")
+    return f"{base_url}/{TEST_DB_NAME}"
 
 
-test_engine = build_test_engine()
+TEST_DATABASE_URL = build_test_database_url()
+test_engine = create_engine(TEST_DATABASE_URL)
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _tables():
-    Base.metadata.create_all(test_engine)
+def _schema():
+    """Build the test schema through the real migrations, so a broken
+    migration fails the suite instead of production."""
+    upgrade_to_head(TEST_DATABASE_URL)
 
 
 @pytest.fixture

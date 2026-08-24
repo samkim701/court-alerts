@@ -5,7 +5,8 @@ from datetime import date, timedelta
 
 from court_alerts.config import CLUB_NAME
 from court_alerts.core.subscription import Subscription
-from court_alerts.db.session import SessionLocal, create_all
+from court_alerts.db.session import SessionLocal
+from court_alerts.db.migrate import upgrade_to_head
 from court_alerts.notify.factory import build_notifier
 from court_alerts.poller import run_poll
 from court_alerts.providers.mock import MockProvider, make_day, open_slot
@@ -14,6 +15,7 @@ from court_alerts.triage.evidence import build_evidence
 from court_alerts.triage.factory import build_triage_agent
 from court_alerts.evals.runner import format_report, score_agent
 from court_alerts.triage.heuristic import HeuristicTriageAgent
+
 
 DEMO_CLUB_ID = "centreville"
 DEMO_COURTS = ["Court 1", "Court 2", "Court 3", "Court 4"]
@@ -41,7 +43,7 @@ def next_weekday(start: date) -> date:
 
 def run_demo() -> None:
     """Two cycles: a fully booked day, then a cancellation."""
-    create_all()
+    upgrade_to_head()
 
     on_date = next_weekday(date.today())
     notifier = build_notifier()
