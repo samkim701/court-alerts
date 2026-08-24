@@ -1,18 +1,45 @@
 import pytest
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from court_alerts.db.session import create_all, engine
+from court_alerts.config import get_database_url
+from court_alerts.db.tables import Base
+
+TEST_DB_NAME = "court_alerts_test"
+
+
+def build_test_engine():
+    """A second database on the same server, so app data and test data
+    can never contaminate each other."""
+    admin_url = get_database_url()
+    admin_engine = create_engine(admin_url, isolation_level="AUTOCOMMIT")
+
+    with admin_engine.connect() as connection:
+        exists = connection.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = :name"),
+            {"name": TEST_DB_NAME},
+        ).scalar()
+        if not exists:
+            connection.execute(text(f'CREATE DATABASE "{TEST_DB_NAME}"'))
+
+    admin_engine.dispose()
+
+    base_url = admin_url.rsplit("/", 1)[0]
+    return create_engine(f"{base_url}/{TEST_DB_NAME}")
+
+
+test_engine = build_test_engine()
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _tables():
-    create_all()
+    Base.metadata.create_all(test_engine)
 
 
 @pytest.fixture
 def session():
     """Each test runs in a transaction that is rolled back afterwards."""
-    connection = engine.connect()
+    connection = test_engine.connect()
     transaction = connection.begin()
     db = Session(bind=connection)
 

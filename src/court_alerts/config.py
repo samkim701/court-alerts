@@ -12,6 +12,8 @@ DEFAULT_DATABASE_URL = (
 
 CLUB_NAME = "Life Time Centreville"
 
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+
 
 def get_database_url() -> str:
     """Connection string, overridable by env for Cloud Run."""
@@ -21,3 +23,7 @@ def get_database_url() -> str:
 def get_discord_webhook_url() -> str | None:
     """None when unset, so the app can fall back to console output."""
     return os.environ.get("DISCORD_WEBHOOK_URL") or None
+
+def get_gemini_api_key() -> str | None:
+    """None when unset, so triage degrades instead of crashing."""
+    return os.environ.get("GEMINI_API_KEY") or None
