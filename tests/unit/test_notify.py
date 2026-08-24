@@ -58,3 +58,10 @@ def test_long_alert_stays_under_the_discord_limit():
 def test_discord_notifier_needs_a_url():
     with pytest.raises(ValueError):
         DiscordNotifier("")
+
+def test_factory_falls_back_to_console_without_a_webhook(monkeypatch):
+    monkeypatch.delenv("DISCORD_WEBHOOK_URL", raising=False)
+
+    from court_alerts.notify.factory import build_notifier
+
+    assert build_notifier().name == "console"

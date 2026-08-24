@@ -17,7 +17,7 @@ dependencies = [
 ]
 
 [project.scripts]
-court-alerts = "court_alerts:main"
+court-alerts = "court_alerts.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]

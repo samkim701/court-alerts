@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from court_alerts.core.models import Slot
 from court_alerts.db.convert import row_to_slot, slot_to_row
 from court_alerts.db.tables import Snapshot
+from court_alerts.db.tables import PollRun, PollStatus, Snapshot
 
 
 def save_snapshot(
@@ -56,3 +57,42 @@ def load_latest_slots(
     for row in snapshot.slots:
         slots.append(row_to_slot(row))
     return slots
+
+def start_poll_run(
+    session: Session,
+    club_id: str,
+    on_date: date,
+    provider: str,
+) -> PollRun:
+    """Open a run row up front, so even a crash leaves a trace."""
+    run = PollRun(
+        club_id=club_id,
+        on_date=on_date,
+        provider=provider,
+        status=PollStatus.OK.value,
+        slot_count=0,
+        opened_count=0,
+        alerts_sent=0,
+    )
+    session.add(run)
+    session.flush()
+    return run
+
+
+def load_recent_runs(
+    session: Session,
+    club_id: str,
+    limit: int = 20,
+) -> list[PollRun]:
+    """Newest runs first — the triage agent's window into history."""
+    statement = (
+        select(PollRun)
+        .where(PollRun.club_id == club_id)
+        .order_by(PollRun.started_at.desc(), PollRun.id.desc())
+        .limit(limit)
+    )
+
+    runs = []
+    for run in session.scalars(statement):
+        runs.append(run)
+    return runs
