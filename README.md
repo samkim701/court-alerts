@@ -248,9 +248,7 @@ originally shared the application database, so running the demo made a
 cold-start test fail. Test outcomes depended on what had been run
 before — which is a test suite that lies.
 
-- `test_models_and_migrations_agree` fails if a model changes without a
-  matching migration, so schema drift cannot reach deployment.
-  
+
 Three tests are worth calling out:
 
 - `test_snapshot_survives_a_delivery_failure` pins the at-least-once
@@ -260,6 +258,8 @@ Three tests are worth calling out:
 - `test_factory_falls_back_to_console_without_a_webhook` exists because
   `notify/factory.py` was once empty while all 32 tests passed — the
   assembly code had nothing testing it.
+- `test_models_and_migrations_agree` fails if a model changes without a
+  matching migration, so schema drift cannot reach deployment.
 
 ## Secrets
 
